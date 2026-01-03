@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教学管理系统</title>
+    <!-- 引入Element UI CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- 引入ECharts CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.css">
+    <!-- 引入自定义CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 登录页面 -->
+        <div v-if="!isLoggedIn" class="login-container">
+            <div class="login-box">
+                <h2 class="login-title">教学管理系统</h2>
+                <el-form :model="loginForm" :rules="loginRules" ref="loginForm" label-position="top">
+                    <el-form-item label="用户名" prop="username">
+                        <el-input v-model="loginForm.username" placeholder="请输入用户名"></el-input>
+                    </el-form-item>
+                    <el-form-item label="密码" prop="password">
+                        <el-input type="password" v-model="loginForm.password" placeholder="请输入密码"></el-input>
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" @click="login" style="width: 100%;">登录</el-button>
+                    </el-form-item>
+                </el-form>
+            </div>
+        </div>
+        
+        <!-- 主应用界面 -->
+        <div v-else class="app-container">
+            <!-- 导航栏 -->
+            <nav class="nav">
+                <div class="nav-logo">教学管理系统</div>
+                <div class="nav-menu">
+                    <!-- 专业主任和系统管理员可见 -->
+                    <div v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'" class="nav-item" :class="{ active: activeModule === 'course-management' }" @click="activeModule = 'course-management'">课程管理</div>
+                    <!-- 专业主任和系统管理员可见 -->
+                    <div v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'" class="nav-item" :class="{ active: activeModule === 'training-program' }" @click="activeModule = 'training-program'">培养方案</div>
+                    <!-- 专业主任和系统管理员可见 -->
+                    <div v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'" class="nav-item" :class="{ active: activeModule === 'knowledge-point' }" @click="activeModule = 'knowledge-point'">知识点管理</div>
+                    <!-- 所有角色可见 -->
+                    <div class="nav-item" :class="{ active: activeModule === 'question-bank' }" @click="activeModule = 'question-bank'">题库管理</div>
+                    <!-- 所有角色可见 -->
+                    <div class="nav-item" :class="{ active: activeModule === 'test-paper' }" @click="activeModule = 'test-paper'">试题组卷</div>
+                    <!-- 所有角色可见 -->
+                    <div class="nav-item" :class="{ active: activeModule === 'score-statistics' }" @click="activeModule = 'score-statistics'">成绩统计模块</div>
+                    <!-- 仅系统管理员可见 -->
+                    <div v-if="currentUser.role === 'systemAdmin'" class="nav-item" :class="{ active: activeModule === 'data-import-export' }" @click="activeModule = 'data-import-export'">数据导入导出</div>
+                    <!-- 仅系统管理员可见 -->
+                    <div v-if="currentUser.role === 'systemAdmin'" class="nav-item" :class="{ active: activeModule === 'user-management' }" @click="activeModule = 'user-management'">用户管理</div>
+                </div>
+                <div class="nav-user">
+                    <el-dropdown @command="handleDropdownCommand">
+                        <span class="el-dropdown-link">
+                            {{ currentUser.username }} <i class="el-icon-arrow-down el-icon--right"></i>
+                        </span>
+                        <el-dropdown-menu slot="dropdown">
+                            <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </el-dropdown>
+                </div>
+            </nav>
+            
+            <!-- 主要内容区域 -->
+            <main class="main-content">
+                <!-- 课程管理模块 -->
+                <div v-show="activeModule === 'course-management'" class="module">
+                    <h2>课程管理</h2>
+                    <div class="filter-section">
+                        <el-select v-model="courseManagementFilters.majorId" placeholder="选择专业" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                        </el-select>
+                        <el-input v-model="courseManagementFilters.courseName" placeholder="课程名称" style="width: 200px; margin-right: 10px;"></el-input>
+                        <el-button type="primary" @click="handleQuery">查询</el-button>
+                        <el-button @click="handleReset">重置</el-button>
+                        <el-button type="success" @click="showAddCourseDialog" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">添加课程</el-button>
+                    </div>
+                    <el-table :data="coursesList" stripe style="margin-top: 20px;">
+                        <el-table-column prop="courseId" label="课程ID" width="80"></el-table-column>
+                        <el-table-column prop="courseName" label="课程名称" min-width="150"></el-table-column>
+                        <el-table-column label="所属专业" width="120">
+                            <template slot-scope="scope">
+                                <span v-if="scope.row.major && scope.row.major.majorName">{{ scope.row.major.majorName }}</span>
+                                <span v-else>未分配</span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="credits" label="学分" width="80"></el-table-column>
+                        <el-table-column prop="totalHours" label="总学时" width="80"></el-table-column>
+                        <el-table-column prop="courseType" label="课程类型" width="100"></el-table-column>
+                        <el-table-column prop="courseStatus" label="状态" width="100"></el-table-column>
+                        <el-table-column label="操作" width="150" fixed="right">
+                            <template slot-scope="scope">
+                                <el-button type="primary" size="mini" @click="showEditCourseDialog(scope.row)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">编辑</el-button>
+                                <el-button type="danger" size="mini" @click="deleteCourse(scope.row.courseId)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+                
+                <!-- 培养方案模块 -->
+                <div v-show="activeModule === 'training-program'" class="module">
+                    <h2>培养方案</h2>
+                    <div class="filter-section">
+                        <el-select v-model="trainingProgramFilters.majorId" placeholder="选择专业" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                        </el-select>
+                        <el-select v-model="trainingProgramFilters.batchId" placeholder="选择届次" style="width: 120px; margin-right: 10px;">
+                            <el-option v-for="batch in batches" :key="batch.batchId" :label="batch.batchYear + '级'" :value="batch.batchId"></el-option>
+                        </el-select>
+                        <el-button type="primary" @click="queryTrainingPrograms">查询</el-button>
+                        <el-button type="success" @click="showAddTrainingProgramDialog" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">添加培养方案</el-button>
+                        <el-button type="warning" @click="showImportFromUrlDialog" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">从URL导入</el-button>
+                    </div>
+                    <el-table :data="trainingPrograms" stripe style="margin-top: 20px;">
+                        <el-table-column prop="programId" label="方案ID" width="80"></el-table-column>
+                        <el-table-column prop="major.majorName" label="所属专业" width="120"></el-table-column>
+                        <el-table-column prop="batch.batchYear" label="届次" width="80"></el-table-column>
+                        <el-table-column prop="programName" label="方案名称" min-width="150"></el-table-column>
+                        <el-table-column prop="totalCredits" label="总学分" width="80"></el-table-column>
+                        <el-table-column prop="totalCourses" label="总课程数" width="80"></el-table-column>
+                        <el-table-column prop="programStatus" label="状态" width="100"></el-table-column>
+                        <el-table-column label="操作" width="150" fixed="right">
+                            <template slot-scope="scope">
+                                <el-button type="primary" size="mini" @click="showEditTrainingProgramDialog(scope.row)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">编辑</el-button>
+                                <el-button type="danger" size="mini" @click="deleteTrainingProgram(scope.row.programId)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+                
+                <!-- 知识点管理模块 -->
+                <div v-show="activeModule === 'knowledge-point'" class="module">
+                    <h2>知识点管理</h2>
+                    <div class="filter-section">
+                        <el-select v-model="knowledgePointFilters.courseId" placeholder="选择课程" style="width: 200px; margin-right: 10px;" @change="handleCourseChange">
+                            <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                        </el-select>
+                        <el-select v-model="knowledgePointFilters.chapterId" placeholder="选择章节" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="chapter in chapters" :key="chapter.chapterId" :label="chapter.chapterName" :value="chapter.chapterId"></el-option>
+                        </el-select>
+                        <el-button type="primary" @click="queryKnowledgePoints">查询</el-button>
+                        <el-button type="success" @click="showAddKnowledgePointDialog" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">添加知识点</el-button>
+                    </div>
+                    <el-table :data="knowledgePointsList" stripe style="margin-top: 20px;">
+                        <el-table-column prop="pointId" label="知识点ID" width="80"></el-table-column>
+                        <el-table-column prop="level" label="级别" width="80">
+                            <template slot-scope="scope">
+                                <el-tag :type="scope.row.level === 1 ? 'primary' : scope.row.level === 2 ? 'success' : scope.row.level === 3 ? 'warning' : scope.row.level === 4 ? 'info' : scope.row.level === 5 ? 'danger' : scope.row.level === 6 ? 'purple' : 'cyan'">
+                                    第{{ scope.row.level }}级
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="pointName" label="知识点名称" min-width="300">
+                            <template slot-scope="scope">
+                                <span :style="{
+                                    marginLeft: `${(scope.row.level - 1) * 25}px`, 
+                                    fontWeight: scope.row.level <= 2 ? 'bold' : 'normal',
+                                    fontSize: scope.row.level === 1 ? '16px' : scope.row.level === 2 ? '14px' : '13px'
+                                }">
+                                    {{ scope.row.pointName }}
+                                </span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="chapter.chapterName" label="所属章节" width="150"></el-table-column>
+                        <el-table-column prop="parent.pointName" label="父知识点" width="150"></el-table-column>
+                        <el-table-column prop="pointDescription" label="知识点说明" show-overflow-tooltip min-width="250"></el-table-column>
+                        <el-table-column prop="keyPoints" label="核心考点" show-overflow-tooltip min-width="250"></el-table-column>
+                        <el-table-column label="操作" width="150" fixed="right">
+                            <template slot-scope="scope">
+                                <el-button type="primary" size="mini" @click="showEditKnowledgePointDialog(scope.row)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">编辑</el-button>
+                                <el-button type="danger" size="mini" @click="deleteKnowledgePoint(scope.row.pointId)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+                
+                <!-- 题库管理模块 -->
+                <div v-show="activeModule === 'question-bank'" class="module">
+                    <h2>题库管理</h2>
+                    <div class="filter-section">
+                        <el-select v-model="questionBankFilters.courseId" placeholder="选择课程" style="width: 200px; margin-right: 10px;">
+                            <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                        </el-select>
+                        <el-select v-model="questionBankFilters.chapterId" placeholder="选择章节" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="chapter in chapters" :key="chapter.chapterId" :label="chapter.chapterName" :value="chapter.chapterId"></el-option>
+                        </el-select>
+                        <el-select v-model="questionBankFilters.questionType" placeholder="题目类型" style="width: 120px; margin-right: 10px;">
+                            <el-option label="单选题" value="multipleChoice"></el-option>
+                            <el-option label="多选题" value="multipleChoice"></el-option>
+                            <el-option label="判断题" value="trueFalse"></el-option>
+                            <el-option label="填空题" value="fillBlank"></el-option>
+                            <el-option label="简答题" value="shortAnswer"></el-option>
+                        </el-select>
+                        <el-button type="primary" @click="queryQuestions">查询</el-button>
+                        <el-button type="success" @click="showAddQuestionDialog" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">添加题目</el-button>
+                    </div>
+                    <el-table :data="questionsList" stripe style="margin-top: 20px;">
+                        <el-table-column prop="questionId" label="题目ID" width="80"></el-table-column>
+                        <el-table-column prop="questionType" label="题型" width="100">
+                            <template slot-scope="scope">
+                                <el-tag :type="scope.row.questionType === 'multipleChoice' ? 'primary' : scope.row.questionType === 'trueFalse' ? 'success' : scope.row.questionType === 'fillBlank' ? 'warning' : 'info'">
+                                    <span v-if="scope.row.questionType === 'multipleChoice'">选择题</span>
+                                    <span v-else-if="scope.row.questionType === 'trueFalse'">判断题</span>
+                                    <span v-else-if="scope.row.questionType === 'fillBlank'">填空题</span>
+                                    <span v-else-if="scope.row.questionType === 'shortAnswer'">简答题</span>
+                                    <span v-else>{{ scope.row.questionType }}</span>
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="questionContent" label="题干" show-overflow-tooltip min-width="400"></el-table-column>
+                        <el-table-column prop="options" label="选项/填空题答案" width="250" show-overflow-tooltip>
+                            <template slot-scope="scope">
+                                <div v-if="scope.row.options" class="options-container">
+                                    <div v-for="(option, index) in scope.row.options.split(';')" :key="index">
+                                        <span v-if="option.trim()" :class="{'option-item': true}">
+                                            {{ option.trim() }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="correctAnswer" label="正确答案" width="120"></el-table-column>
+                        <el-table-column prop="analysis" label="答案解析" show-overflow-tooltip min-width="300"></el-table-column>
+                        <el-table-column prop="difficultyLevel" label="难度等级" width="100">
+                            <template slot-scope="scope">
+                                <el-tag :type="scope.row.difficultyLevel === 'easy' ? 'success' : scope.row.difficultyLevel === 'medium' ? 'warning' : 'danger'">
+                                    {{ scope.row.difficultyLevel === 'easy' ? '简单' : scope.row.difficultyLevel === 'medium' ? '中等' : '困难' }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="chapter.chapterName" label="所属章节" width="150"></el-table-column>
+                        <el-table-column prop="course.courseName" label="所属课程" width="150"></el-table-column>
+                        <el-table-column label="操作" width="150" fixed="right">
+                            <template slot-scope="scope">
+                                <el-button type="primary" size="mini" @click="showEditQuestionDialog(scope.row)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">编辑</el-button>
+                                <el-button type="danger" size="mini" @click="deleteQuestion(scope.row.questionId)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+                
+                <!-- 试题组卷模块 -->
+                <div v-show="activeModule === 'test-paper'" class="module">
+                    <h2>试题组卷</h2>
+                    <el-form :model="testPaperForm" :rules="testPaperRules" ref="testPaperForm" class="form-container">
+                        <el-form-item label="试卷名称" prop="paperName">
+                            <el-input v-model="testPaperForm.paperName" placeholder="请输入试卷名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="选择课程" prop="courseId">
+                            <el-select v-model="testPaperForm.courseId" placeholder="请选择课程">
+                                <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="选择章节" prop="chapterIds">
+                            <el-select v-model="testPaperForm.chapterIds" placeholder="请选择章节" multiple>
+                                <el-option v-for="chapter in chapters" :key="chapter.chapterId" :label="chapter.chapterName" :value="chapter.chapterId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="题目数量" prop="questionCount">
+                            <el-input-number v-model="testPaperForm.questionCount" :min="5" :max="50" :step="1"></el-input-number>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-button type="primary" @click="generateTestPaper">生成试卷</el-button>
+                            <el-button @click="resetTestPaperForm">重置</el-button>
+                        </el-form-item>
+                    </el-form>
+                    <div v-if="generatedTestPaper" class="test-paper-container">
+                        <h3>{{ generatedTestPaper.paperName }}</h3>
+                        <p>课程：{{ generatedTestPaper.course.courseName }}</p>
+                        <p>题目数量：{{ generatedTestPaper.questions.length }} 题</p>
+                        <el-button type="success" @click="downloadTestPaper">下载试卷</el-button>
+                        <div class="questions-container" style="margin-top: 20px;">
+                            <div v-for="(question, index) in generatedTestPaper.questions" :key="question.questionId" class="question-item">
+                                <div class="question-header">
+                                    <span class="question-number">{{ index + 1 }}. </span>
+                                    <span class="question-content">{{ question.questionContent }}</span>
+                                </div>
+                                <div class="question-options" v-if="question.optionA">
+                                    <p>A. {{ question.optionA }}</p>
+                                    <p>B. {{ question.optionB }}</p>
+                                    <p>C. {{ question.optionC }}</p>
+                                    <p>D. {{ question.optionD }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 教学计划管理模块 -->
+                <div v-show="activeModule === 'teaching-plan'" class="module">
+                    <h2>教学计划管理</h2>
+                    <div class="filter-section">
+                        <el-select v-model="teachingPlanFilters.majorId" placeholder="选择专业" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                        </el-select>
+                        <el-select v-model="teachingPlanFilters.batchId" placeholder="选择届次" style="width: 120px; margin-right: 10px;">
+                            <el-option v-for="batch in batches" :key="batch.batchId" :label="batch.batchYear + '级'" :value="batch.batchId"></el-option>
+                        </el-select>
+                        <el-select v-model="teachingPlanFilters.semesterId" placeholder="选择学期" style="width: 120px; margin-right: 10px;">
+                            <el-option v-for="semester in semesters" :key="semester.semesterId" :label="semester.semesterCode" :value="semester.semesterId"></el-option>
+                        </el-select>
+                        <el-select v-model="teachingPlanFilters.courseId" placeholder="选择课程" style="width: 200px; margin-right: 10px;">
+                            <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                        </el-select>
+                        <el-button type="primary" @click="queryTeachingPlans">查询</el-button>
+                        <el-dropdown @command="exportTeachingPlans" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">
+                            <el-button type="success">
+                                导出教学计划 <i class="el-icon-arrow-down el-icon--right"></i>
+                            </el-button>
+                            <el-dropdown-menu slot="dropdown">
+                                <el-dropdown-item command="excel">导出Excel</el-dropdown-item>
+                                <el-dropdown-item command="pdf">导出PDF</el-dropdown-item>
+                            </el-dropdown-menu>
+                        </el-dropdown>
+                    </div>
+                    
+                    <!-- 统计信息展示 -->
+                    <div v-if="teachingPlanStatistics && Object.keys(teachingPlanStatistics).length > 0" class="statistics-card">
+                        <el-card shadow="hover" style="margin: 20px 0;">
+                            <div slot="header" class="card-header">
+                                <span>教学计划统计信息</span>
+                            </div>
+                            <div class="statistics-content">
+                                <div class="statistic-item">
+                                    <span class="statistic-label">总课程数：</span>
+                                    <span class="statistic-value">{{ teachingPlanStatistics.totalCourses }}</span>
+                                </div>
+                                <div class="statistic-item">
+                                    <span class="statistic-label">总学分：</span>
+                                    <span class="statistic-value">{{ teachingPlanStatistics.totalCredits }}</span>
+                                </div>
+                                <div class="statistic-item">
+                                    <span class="statistic-label">总学时：</span>
+                                    <span class="statistic-value">{{ teachingPlanStatistics.totalHours }}</span>
+                                </div>
+                                <div class="statistic-item">
+                                    <span class="statistic-label">必修课数：</span>
+                                    <span class="statistic-value">{{ teachingPlanStatistics.requiredCourseCount }}</span>
+                                </div>
+                                <div class="statistic-item">
+                                    <span class="statistic-label">选修课数：</span>
+                                    <span class="statistic-value">{{ teachingPlanStatistics.electiveCourseCount }}</span>
+                                </div>
+                                <div class="statistic-item">
+                                    <span class="statistic-label">必修课占比：</span>
+                                    <span class="statistic-value">{{ teachingPlanStatistics.requiredCourseRatio }}%</span>
+                                </div>
+                            </div>
+                        </el-card>
+                    </div>
+                    
+                    <el-table :data="teachingPlans" stripe style="margin-top: 20px;">
+                        <el-table-column prop="major.majorName" label="专业" min-width="120"></el-table-column>
+                        <el-table-column prop="batch.batchYear" label="届次" width="80"></el-table-column>
+                        <el-table-column prop="semester.semesterCode" label="学期" width="80"></el-table-column>
+                        <el-table-column prop="course.courseName" label="课程" min-width="150"></el-table-column>
+                        <el-table-column prop="course.credits" label="学分" width="80"></el-table-column>
+                        <el-table-column prop="course.totalHours" label="总学时" width="80"></el-table-column>
+                        <el-table-column prop="course.courseType" label="课程类型" width="100"></el-table-column>
+                        <el-table-column prop="teachingGroup" label="授课教师组" min-width="150"></el-table-column>
+                        <el-table-column prop="version" label="版本" width="80"></el-table-column>
+                        <el-table-column prop="planStatus" label="状态" width="100"></el-table-column>
+                        <el-table-column label="操作" width="120" fixed="right">
+                                <template slot-scope="scope">
+                                    <el-button type="warning" size="mini" @click="archiveTeachingPlan(scope.row.planId)" v-if="(currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin') && scope.row.planStatus !== '已归档'">归档</el-button>
+                                    <el-button type="danger" size="mini" @click="invalidateTeachingPlan(scope.row.planId)" v-if="(currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin') && scope.row.planStatus === '生效'">作废</el-button>
+                                </template>
+                            </el-table-column>
+                    </el-table>
+                </div>
+                
+                <!-- 课程目录模块 -->
+                <div v-show="activeModule === 'course-catalog'" class="module">
+                    <h2>课程目录模块</h2>
+                    <div class="filter-section">
+                        <el-select v-model="courseCatalogFilters.majorId" placeholder="选择专业" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                        </el-select>
+                        <el-select v-model="courseCatalogFilters.courseId" placeholder="选择课程" style="width: 200px; margin-right: 10px;">
+                            <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                        </el-select>
+                        <el-button type="primary" @click="queryCourseCatalog">查询</el-button>
+                        <el-button type="success" @click="showAddChapterDialog" v-if="courseCatalogFilters.courseId && (currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin')">添加章节</el-button>
+                    </div>
+                    <div class="chapter-manage-section" style="margin-top: 20px; display: flex;">
+                        <div class="chapter-list" style="flex: 1;">
+                            <el-table :data="chapters" stripe style="width: 100%;" @row-click="selectChapter">
+                                <el-table-column prop="chapterOrder" label="章节顺序" width="100"></el-table-column>
+                                <el-table-column prop="chapterName" label="章节名称"></el-table-column>
+                                <el-table-column prop="chapterDescription" label="章节描述" show-overflow-tooltip></el-table-column>
+                                <el-table-column label="操作" width="180" fixed="right">
+                                    <template slot-scope="scope">
+                                        <el-button type="primary" size="mini" @click="showEditChapterDialog(scope.row)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">编辑</el-button>
+                                        <el-button type="danger" size="mini" @click="deleteChapter(scope.row.chapterId)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">删除</el-button>
+                                        <el-button type="info" size="mini" @click="moveChapter(scope.row, 'up')" :disabled="scope.row.chapterOrder === 1" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">上移</el-button>
+                                        <el-button type="info" size="mini" @click="moveChapter(scope.row, 'down')" :disabled="scope.row.chapterOrder === chapters.length" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin'">下移</el-button>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                        <div class="chapter-tree" style="flex: 1; margin-left: 20px;">
+                            <h3>课程目录树形结构</h3>
+                            <el-tree :data="courseTreeData" :props="treeProps" style="margin-top: 10px;"></el-tree>
+                        </div>
+                    </div>
+                    
+                    <!-- 知识点管理区域 -->
+                    <div v-if="selectedChapter" class="knowledge-point-section" style="margin-top: 30px;">
+                        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3>知识点管理 - {{ selectedChapter.chapterName }}</h3>
+                            <el-button type="success" @click="showAddKnowledgePointDialog" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">添加知识点</el-button>
+                        </div>
+                        <el-table :data="knowledgePoints" stripe style="width: 100%; margin-top: 10px;">
+                            <el-table-column prop="pointName" label="知识点名称"></el-table-column>
+                            <el-table-column prop="pointDescription" label="知识点描述" show-overflow-tooltip></el-table-column>
+                            <el-table-column prop="keyPoints" label="核心考点" show-overflow-tooltip></el-table-column>
+                            <el-table-column label="操作" width="150" fixed="right">
+                                <template slot-scope="scope">
+                                        <el-button type="primary" size="mini" @click="showEditKnowledgePointDialog(scope.row)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">编辑</el-button>
+                                        <el-button type="danger" size="mini" @click="deleteKnowledgePoint(scope.row.pointId)" v-if="currentUser.role === 'majorDirector' || currentUser.role === 'systemAdmin' || currentUser.role === 'teacher'">删除</el-button>
+                                    </template>
+                            </el-table-column>
+                        </el-table>
+                    </div>
+                </div>
+                
+                <!-- 课程管理模块对话框 -->
+                <!-- 添加课程对话框 -->
+                <el-dialog title="添加课程" :visible.sync="addCourseDialogVisible" width="500px">
+                    <el-form :model="courseForm" :rules="courseRules" ref="courseForm">
+                        <el-form-item label="课程名称" prop="courseName">
+                            <el-input v-model="courseForm.courseName" placeholder="请输入课程名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="所属专业" prop="majorId">
+                            <el-select v-model="courseForm.majorId" placeholder="请选择专业">
+                                <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="学分" prop="credits">
+                            <el-input type="number" v-model="courseForm.credits" placeholder="请输入学分"></el-input>
+                        </el-form-item>
+                        <el-form-item label="总学时" prop="totalHours">
+                            <el-input type="number" v-model="courseForm.totalHours" placeholder="请输入总学时"></el-input>
+                        </el-form-item>
+                        <el-form-item label="课程类型" prop="courseType">
+                            <el-select v-model="courseForm.courseType" placeholder="请选择课程类型">
+                                <el-option label="必修课" value="required"></el-option>
+                                <el-option label="选修课" value="elective"></el-option>
+                                <el-option label="专业基础课" value="foundation"></el-option>
+                                <el-option label="专业核心课" value="core"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="课程代码" prop="courseCode">
+                            <el-input v-model="courseForm.courseCode" placeholder="请输入课程代码"></el-input>
+                        </el-form-item>
+                        <el-form-item label="理论学时" prop="theoryHours">
+                            <el-input type="number" v-model.number="courseForm.theoryHours" placeholder="请输入理论学时"></el-input>
+                        </el-form-item>
+                        <el-form-item label="实践学时" prop="practiceHours">
+                            <el-input type="number" v-model.number="courseForm.practiceHours" placeholder="请输入实践学时"></el-input>
+                        </el-form-item>
+                        <el-form-item label="课程性质" prop="courseNature">
+                            <el-select v-model="courseForm.courseNature" placeholder="请选择课程性质">
+                                <el-option label="公共课" value="public"></el-option>
+                                <el-option label="专业课" value="specialized"></el-option>
+                                <el-option label="实践课" value="practical"></el-option>
+                                <el-option label="实验课" value="experimental"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="课程状态" prop="courseStatus">
+                            <el-select v-model="courseForm.courseStatus" placeholder="请选择课程状态">
+                                <el-option label="启用" value="enabled"></el-option>
+                                <el-option label="禁用" value="disabled"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="addCourseDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveCourse">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 编辑课程对话框 -->
+                <el-dialog title="编辑课程" :visible.sync="editCourseDialogVisible" width="500px">
+                    <el-form :model="courseForm" :rules="courseRules" ref="editCourseForm">
+                        <el-form-item label="课程名称" prop="courseName">
+                            <el-input v-model="courseForm.courseName" placeholder="请输入课程名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="所属专业" prop="majorId">
+                            <el-select v-model="courseForm.majorId" placeholder="请选择专业">
+                                <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="学分" prop="credits">
+                            <el-input type="number" v-model="courseForm.credits" placeholder="请输入学分"></el-input>
+                        </el-form-item>
+                        <el-form-item label="总学时" prop="totalHours">
+                            <el-input type="number" v-model="courseForm.totalHours" placeholder="请输入总学时"></el-input>
+                        </el-form-item>
+                        <el-form-item label="课程类型" prop="courseType">
+                            <el-select v-model="courseForm.courseType" placeholder="请选择课程类型">
+                                <el-option label="必修课" value="required"></el-option>
+                                <el-option label="选修课" value="elective"></el-option>
+                                <el-option label="专业基础课" value="foundation"></el-option>
+                                <el-option label="专业核心课" value="core"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="课程代码" prop="courseCode">
+                            <el-input v-model="courseForm.courseCode" placeholder="请输入课程代码"></el-input>
+                        </el-form-item>
+                        <el-form-item label="理论学时" prop="theoryHours">
+                            <el-input type="number" v-model.number="courseForm.theoryHours" placeholder="请输入理论学时"></el-input>
+                        </el-form-item>
+                        <el-form-item label="实践学时" prop="practiceHours">
+                            <el-input type="number" v-model.number="courseForm.practiceHours" placeholder="请输入实践学时"></el-input>
+                        </el-form-item>
+                        <el-form-item label="课程性质" prop="courseNature">
+                            <el-select v-model="courseForm.courseNature" placeholder="请选择课程性质">
+                                <el-option label="公共课" value="public"></el-option>
+                                <el-option label="专业课" value="specialized"></el-option>
+                                <el-option label="实践课" value="practical"></el-option>
+                                <el-option label="实验课" value="experimental"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="课程状态" prop="courseStatus">
+                            <el-select v-model="courseForm.courseStatus" placeholder="请选择课程状态">
+                                <el-option label="启用" value="enabled"></el-option>
+                                <el-option label="禁用" value="disabled"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="editCourseDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveCourse">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 培养方案模块对话框 -->
+                <!-- 添加培养方案对话框 -->
+                <el-dialog title="添加培养方案" :visible.sync="addTrainingProgramDialogVisible" width="500px">
+                    <el-form :model="trainingProgramForm" :rules="trainingProgramRules" ref="trainingProgramForm">
+                        <el-form-item label="方案名称" prop="programName">
+                            <el-input v-model="trainingProgramForm.programName" placeholder="请输入方案名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="所属专业" prop="majorId">
+                            <el-select v-model="trainingProgramForm.majorId" placeholder="请选择专业">
+                                <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="届次" prop="batchId">
+                            <el-select v-model="trainingProgramForm.batchId" placeholder="请选择届次">
+                                <el-option v-for="batch in batches" :key="batch.batchId" :label="batch.batchYear + '级'" :value="batch.batchId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="总学分" prop="totalCredits">
+                            <el-input type="number" v-model="trainingProgramForm.totalCredits" placeholder="请输入总学分"></el-input>
+                        </el-form-item>
+                        <el-form-item label="方案状态">
+                            <el-select v-model="trainingProgramForm.programStatus" placeholder="请选择方案状态">
+                                <el-option label="启用" value="enabled"></el-option>
+                                <el-option label="禁用" value="disabled"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="addTrainingProgramDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveTrainingProgram">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 编辑培养方案对话框 -->
+                <el-dialog title="编辑培养方案" :visible.sync="editTrainingProgramDialogVisible" width="500px">
+                    <el-form :model="trainingProgramForm" :rules="trainingProgramRules" ref="trainingProgramForm">
+                        <el-form-item label="方案名称" prop="programName">
+                            <el-input v-model="trainingProgramForm.programName" placeholder="请输入方案名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="所属专业" prop="majorId">
+                            <el-select v-model="trainingProgramForm.majorId" placeholder="请选择专业">
+                                <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="届次" prop="batchId">
+                            <el-select v-model="trainingProgramForm.batchId" placeholder="请选择届次">
+                                <el-option v-for="batch in batches" :key="batch.batchId" :label="batch.batchYear + '级'" :value="batch.batchId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="总学分" prop="totalCredits">
+                            <el-input type="number" v-model="trainingProgramForm.totalCredits" placeholder="请输入总学分"></el-input>
+                        </el-form-item>
+                        <el-form-item label="方案状态">
+                            <el-select v-model="trainingProgramForm.programStatus" placeholder="请选择方案状态">
+                                <el-option label="启用" value="enabled"></el-option>
+                                <el-option label="禁用" value="disabled"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="editTrainingProgramDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveTrainingProgram">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 从URL导入培养方案对话框 -->
+                <el-dialog title="从URL导入培养方案" :visible.sync="importFromUrlDialogVisible" width="500px">
+                    <el-form :model="importFromUrlForm" :rules="importFromUrlRules" ref="importFromUrlForm">
+                        <el-form-item label="培养方案URL" prop="url">
+                            <el-input v-model="importFromUrlForm.url" placeholder="请输入培养方案URL地址" type="url"></el-input>
+                        </el-form-item>
+                        <el-form-item label="所属专业" prop="majorId">
+                            <el-select v-model="importFromUrlForm.majorId" placeholder="请选择专业">
+                                <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="届次" prop="batchId">
+                            <el-select v-model="importFromUrlForm.batchId" placeholder="请选择届次">
+                                <el-option v-for="batch in batches" :key="batch.batchId" :label="batch.batchYear + '级'" :value="batch.batchId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="importFromUrlDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="importTrainingProgramFromUrl">导入</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 题库管理模块对话框 -->
+                <!-- 添加题目对话框 -->
+                <el-dialog title="添加题目" :visible.sync="addQuestionDialogVisible" width="800px">
+                    <el-form :model="questionForm" :rules="questionRules" ref="questionForm">
+                        <el-form-item label="题型" prop="questionType">
+                            <el-select v-model="questionForm.questionType" placeholder="请选择题目类型">
+                                <el-option label="单选题" value="multipleChoice"></el-option>
+                                <el-option label="多选题" value="multipleChoice"></el-option>
+                                <el-option label="判断题" value="trueFalse"></el-option>
+                                <el-option label="填空题" value="fillBlank"></el-option>
+                                <el-option label="简答题" value="shortAnswer"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="题干" prop="questionContent">
+                            <el-input type="textarea" v-model="questionForm.questionContent" placeholder="请输入题干" rows="4"></el-input>
+                        </el-form-item>
+                        <el-form-item label="课程" prop="courseId">
+                            <el-select v-model="questionForm.courseId" placeholder="请选择课程">
+                                <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="章节" prop="chapterId">
+                            <el-select v-model="questionForm.chapterId" placeholder="请选择章节">
+                                <el-option v-for="chapter in chapters" :key="chapter.chapterId" :label="chapter.chapterName" :value="chapter.chapterId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="难度等级" prop="difficultyLevel">
+                            <el-select v-model="questionForm.difficultyLevel" placeholder="请选择难度等级">
+                                <el-option label="简单" value="easy"></el-option>
+                                <el-option label="中等" value="medium"></el-option>
+                                <el-option label="困难" value="hard"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="选项/填空题答案" v-if="questionForm.questionType === 'multipleChoice' || questionForm.questionType === 'fillBlank'">
+                            <div v-if="questionForm.questionType === 'multipleChoice'">
+                                <el-input v-model="questionForm.optionA" placeholder="选项A" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionB" placeholder="选项B" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionC" placeholder="选项C" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionD" placeholder="选项D" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionE" placeholder="选项E（可选）"></el-input>
+                            </div>
+                            <div v-else-if="questionForm.questionType === 'fillBlank'">
+                                <el-input type="textarea" v-model="questionForm.options" placeholder="填空题答案，多个答案用;隔开" rows="3"></el-input>
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="正确答案" prop="correctAnswer">
+                            <el-input v-model="questionForm.correctAnswer" placeholder="
+                                <span v-if='questionForm.questionType === "multipleChoice"'>请输入正确答案（例如：A或BCD）</span>
+                                <span v-else-if='questionForm.questionType === "trueFalse"'>请输入正确答案（对/错）</span>
+                                <span v-else>请输入正确答案</span>
+                            "></el-input>
+                        </el-form-item>
+                        <el-form-item label="答案解析">
+                            <el-input type="textarea" v-model="questionForm.analysis" placeholder="请输入答案解析" rows="4"></el-input>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="addQuestionDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveQuestion">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 编辑题目对话框 -->
+                <el-dialog title="编辑题目" :visible.sync="editQuestionDialogVisible" width="800px">
+                    <el-form :model="questionForm" :rules="questionRules" ref="questionForm">
+                        <el-form-item label="题型" prop="questionType">
+                            <el-select v-model="questionForm.questionType" placeholder="请选择题目类型">
+                                <el-option label="单选题" value="multipleChoice"></el-option>
+                                <el-option label="多选题" value="multipleChoice"></el-option>
+                                <el-option label="判断题" value="trueFalse"></el-option>
+                                <el-option label="填空题" value="fillBlank"></el-option>
+                                <el-option label="简答题" value="shortAnswer"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="题干" prop="questionContent">
+                            <el-input type="textarea" v-model="questionForm.questionContent" placeholder="请输入题干" rows="4"></el-input>
+                        </el-form-item>
+                        <el-form-item label="课程" prop="courseId">
+                            <el-select v-model="questionForm.courseId" placeholder="请选择课程">
+                                <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="章节" prop="chapterId">
+                            <el-select v-model="questionForm.chapterId" placeholder="请选择章节">
+                                <el-option v-for="chapter in chapters" :key="chapter.chapterId" :label="chapter.chapterName" :value="chapter.chapterId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="难度等级" prop="difficultyLevel">
+                            <el-select v-model="questionForm.difficultyLevel" placeholder="请选择难度等级">
+                                <el-option label="简单" value="easy"></el-option>
+                                <el-option label="中等" value="medium"></el-option>
+                                <el-option label="困难" value="hard"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="选项/填空题答案" v-if="questionForm.questionType === 'multipleChoice' || questionForm.questionType === 'fillBlank'">
+                            <div v-if="questionForm.questionType === 'multipleChoice'">
+                                <el-input v-model="questionForm.optionA" placeholder="选项A" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionB" placeholder="选项B" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionC" placeholder="选项C" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionD" placeholder="选项D" style="margin-bottom: 10px;"></el-input>
+                                <el-input v-model="questionForm.optionE" placeholder="选项E（可选）"></el-input>
+                            </div>
+                            <div v-else-if="questionForm.questionType === 'fillBlank'">
+                                <el-input type="textarea" v-model="questionForm.options" placeholder="填空题答案，多个答案用;隔开" rows="3"></el-input>
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="正确答案" prop="correctAnswer">
+                            <el-input v-model="questionForm.correctAnswer" placeholder="
+                                <span v-if='questionForm.questionType === "multipleChoice"'>请输入正确答案（例如：A或BCD）</span>
+                                <span v-else-if='questionForm.questionType === "trueFalse"'>请输入正确答案（对/错）</span>
+                                <span v-else>请输入正确答案</span>
+                            "></el-input>
+                        </el-form-item>
+                        <el-form-item label="答案解析">
+                            <el-input type="textarea" v-model="questionForm.analysis" placeholder="请输入答案解析" rows="4"></el-input>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="editQuestionDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveQuestion">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 添加章节对话框 -->
+                <el-dialog title="添加章节" :visible.sync="addChapterDialogVisible" width="500px">
+                    <el-form :model="chapterForm" :rules="chapterRules" ref="chapterForm">
+                        <el-form-item label="章节名称" prop="chapterName">
+                            <el-input v-model="chapterForm.chapterName" placeholder="请输入章节名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="章节描述" prop="chapterDescription">
+                            <el-input type="textarea" v-model="chapterForm.chapterDescription" placeholder="请输入章节描述"></el-input>
+                        </el-form-item>
+                        <el-form-item label="章节顺序">
+                            <el-input-number v-model="chapterForm.chapterOrder" :min="1" :max="chapters.length + 1" :step="1"></el-input-number>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="addChapterDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveChapter">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 编辑章节对话框 -->
+                <el-dialog title="编辑章节" :visible.sync="editChapterDialogVisible" width="500px">
+                    <el-form :model="chapterForm" :rules="chapterRules" ref="chapterForm">
+                        <el-form-item label="章节名称" prop="chapterName">
+                            <el-input v-model="chapterForm.chapterName" placeholder="请输入章节名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="章节描述" prop="chapterDescription">
+                            <el-input type="textarea" v-model="chapterForm.chapterDescription" placeholder="请输入章节描述"></el-input>
+                        </el-form-item>
+                        <el-form-item label="章节顺序">
+                            <el-input-number v-model="chapterForm.chapterOrder" :min="1" :max="chapters.length" :step="1"></el-input-number>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="editChapterDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveChapter">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 添加知识点对话框 -->
+                <el-dialog title="添加知识点" :visible.sync="addKnowledgePointDialogVisible" width="600px">
+                    <el-form :model="knowledgePointForm" :rules="knowledgePointRules" ref="knowledgePointForm">
+                        <el-form-item label="知识点名称" prop="pointName">
+                            <el-input v-model="knowledgePointForm.pointName" placeholder="请输入知识点名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="知识点级别" prop="level">
+                            <el-select v-model="knowledgePointForm.level" placeholder="请选择知识点级别" @change="handleLevelChange">
+                                <el-option label="第1级" :value="1"></el-option>
+                                <el-option label="第2级" :value="2"></el-option>
+                                <el-option label="第3级" :value="3"></el-option>
+                                <el-option label="第4级" :value="4"></el-option>
+                                <el-option label="第5级" :value="5"></el-option>
+                                <el-option label="第6级" :value="6"></el-option>
+                                <el-option label="第7级" :value="7"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="父知识点" prop="parentId">
+                            <el-select v-model="knowledgePointForm.parentId" placeholder="请选择父知识点" :disabled="knowledgePointForm.level === 1">
+                                <el-option v-for="kp in knowledgePointsList" :key="kp.pointId" :label="kp.pointName" :value="kp.pointId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="知识点说明" prop="pointDescription">
+                            <el-input type="textarea" v-model="knowledgePointForm.pointDescription" placeholder="请输入知识点说明" rows="4"></el-input>
+                        </el-form-item>
+                        <el-form-item label="核心考点" prop="keyPoints">
+                            <el-input type="textarea" v-model="knowledgePointForm.keyPoints" placeholder="请输入核心考点" rows="4"></el-input>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="addKnowledgePointDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveKnowledgePoint">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 编辑知识点对话框 -->
+                <el-dialog title="编辑知识点" :visible.sync="editKnowledgePointDialogVisible" width="600px">
+                    <el-form :model="knowledgePointForm" :rules="knowledgePointRules" ref="knowledgePointForm">
+                        <el-form-item label="知识点名称" prop="pointName">
+                            <el-input v-model="knowledgePointForm.pointName" placeholder="请输入知识点名称"></el-input>
+                        </el-form-item>
+                        <el-form-item label="知识点级别" prop="level">
+                            <el-select v-model="knowledgePointForm.level" placeholder="请选择知识点级别" @change="handleLevelChange">
+                                <el-option label="第1级" value="1"></el-option>
+                                <el-option label="第2级" value="2"></el-option>
+                                <el-option label="第3级" value="3"></el-option>
+                                <el-option label="第4级" value="4"></el-option>
+                                <el-option label="第5级" value="5"></el-option>
+                                <el-option label="第6级" value="6"></el-option>
+                                <el-option label="第7级" value="7"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="父知识点" prop="parentId">
+                            <el-select v-model="knowledgePointForm.parentId" placeholder="请选择父知识点" :disabled="knowledgePointForm.level === 1">
+                                <el-option v-for="kp in knowledgePointsList" :key="kp.pointId" :label="kp.pointName" :value="kp.pointId"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="知识点说明" prop="pointDescription">
+                            <el-input type="textarea" v-model="knowledgePointForm.pointDescription" placeholder="请输入知识点说明" rows="4"></el-input>
+                        </el-form-item>
+                        <el-form-item label="核心考点" prop="keyPoints">
+                            <el-input type="textarea" v-model="knowledgePointForm.keyPoints" placeholder="请输入核心考点" rows="4"></el-input>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="editKnowledgePointDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveKnowledgePoint">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 章节小测模块 -->
+                <div v-show="activeModule === 'chapter-quiz'" class="module">
+                    <h2>章节小测模块</h2>
+                    <div class="filter-section">
+                        <el-select v-model="chapterQuizFilters.majorId" placeholder="选择专业" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                        </el-select>
+                        <el-select v-model="chapterQuizFilters.courseId" placeholder="选择课程" style="width: 200px; margin-right: 10px;">
+                            <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                        </el-select>
+                        <el-select v-model="chapterQuizFilters.chapterId" placeholder="选择章节" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="chapter in chapters" :key="chapter.chapterId" :label="chapter.chapterName" :value="chapter.chapterId"></el-option>
+                        </el-select>
+                        <el-input-number v-model="chapterQuizFilters.questionCount" :min="5" :max="50" placeholder="题目数量" style="width: 120px; margin-right: 10px;"></el-input-number>
+                        <el-button type="primary" @click="generateChapterQuiz">生成小测</el-button>
+                    </div>
+                    <div v-if="quizQuestions.length > 0" class="quiz-container">
+                        <div v-for="(question, index) in quizQuestions" :key="question.questionId" class="quiz-item">
+                            <div class="question-header">
+                                <span class="question-number">{{ index + 1 }}.</span>
+                                <span class="question-content">{{ question.questionContent }}</span>
+                            </div>
+                            <div class="question-options" v-if="question.optionA">
+                                <el-radio-group v-model="question.userAnswer">
+                                    <el-radio label="A">{{ question.optionA }}</el-radio>
+                                    <el-radio label="B">{{ question.optionB }}</el-radio>
+                                    <el-radio label="C">{{ question.optionC }}</el-radio>
+                                    <el-radio label="D">{{ question.optionD }}</el-radio>
+                                </el-radio-group>
+                            </div>
+                        </div>
+                        <el-button type="primary" @click="submitQuiz" style="margin-top: 20px;">提交答案</el-button>
+                    </div>
+                    <div v-if="quizResult" class="quiz-result">
+                        <h3>小测结果</h3>
+                        <p>总得分: {{ quizResult.totalScore }}</p>
+                        <p>正确题目数: {{ quizResult.correctCount }} / {{ quizResult.totalCount }}</p>
+                        <el-button @click="resetQuiz">重新开始</el-button>
+                    </div>
+                </div>
+                
+                <!-- 成绩统计模块 -->
+                <div v-show="activeModule === 'score-statistics'" class="module">
+                    <h2>成绩统计模块</h2>
+                    <div class="filter-section">
+                        <el-select v-model="scoreStatisticsFilters.majorId" placeholder="选择专业" style="width: 150px; margin-right: 10px;">
+                            <el-option v-for="major in majors" :key="major.majorId" :label="major.majorName" :value="major.majorId"></el-option>
+                        </el-select>
+                        <el-select v-model="scoreStatisticsFilters.courseId" placeholder="选择课程" style="width: 200px; margin-right: 10px;">
+                            <el-option v-for="course in courses" :key="course.courseId" :label="course.courseName" :value="course.courseId"></el-option>
+                        </el-select>
+                        <el-select v-model="scoreStatisticsFilters.examType" placeholder="考试类型" style="width: 150px; margin-right: 10px;">
+                            <el-option label="期中考试" value="midterm"></el-option>
+                            <el-option label="期末考试" value="final"></el-option>
+                            <el-option label="章节小测" value="chapter"></el-option>
+                        </el-select>
+                        <el-button type="primary" @click="queryScoreStatistics">查询</el-button>
+                    </div>
+                    <div class="statistics-container">
+                        <div class="table-item">
+                            <h3>成绩分布</h3>
+                            <el-table :data="scoreDistributionData" style="width: 100%">
+                                <el-table-column prop="range" label="分数段" width="120"></el-table-column>
+                                <el-table-column prop="count" label="人数" width="100"></el-table-column>
+                                <el-table-column prop="percentage" label="比例" width="120"></el-table-column>
+                            </el-table>
+                        </div>
+                        <div class="table-item">
+                            <h3>知识点掌握情况</h3>
+                            <el-table :data="knowledgePointData" style="width: 100%">
+                                <el-table-column prop="name" label="知识点" min-width="150"></el-table-column>
+                                <el-table-column prop="score" label="平均得分" width="120"></el-table-column>
+                                <el-table-column prop="level" label="掌握程度" width="120">
+                                    <template slot-scope="scope">
+                                        <el-tag :type="scope.row.level === '优秀' ? 'success' : scope.row.level === '良好' ? 'warning' : 'danger'">
+                                            {{ scope.row.level }}
+                                        </el-tag>
+                                    </template>
+                                </el-table-column>
+                            </el-table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 数据导入导出模块 -->
+                <div v-show="activeModule === 'data-import-export'" class="module">
+                    <h2>数据导入导出模块</h2>
+                    <div class="import-export-container">
+                        <div class="import-section">
+                            <h3>数据导入</h3>
+                            <div class="import-item">
+                                <span>导入试题:</span>
+                                <el-upload
+                                    class="upload-demo"
+                                    action="/ums/api/import/questions"
+                                    :on-success="handleQuestionImportSuccess"
+                                    :on-error="handleImportError"
+                                    :auto-upload="false"
+                                    ref="questionUpload">
+                                    <el-button slot="trigger" type="primary">选择文件</el-button>
+                                    <el-button style="margin-left: 10px;" @click="submitQuestionUpload">上传</el-button>
+                                </el-upload>
+                            </div>
+                            <div class="import-item">
+                                <span>导入学生信息:</span>
+                                <el-upload
+                                    class="upload-demo"
+                                    action="/ums/api/import/students"
+                                    :on-success="handleStudentImportSuccess"
+                                    :on-error="handleImportError"
+                                    :auto-upload="false"
+                                    ref="studentUpload">
+                                    <el-button slot="trigger" type="primary">选择文件</el-button>
+                                    <el-button style="margin-left: 10px;" @click="submitStudentUpload">上传</el-button>
+                                </el-upload>
+                            </div>
+                            <div class="import-item">
+                                <span>导入成绩:</span>
+                                <el-upload
+                                    class="upload-demo"
+                                    action="/ums/api/import/scores"
+                                    :on-success="handleScoreImportSuccess"
+                                    :on-error="handleImportError"
+                                    :auto-upload="false"
+                                    ref="scoreUpload">
+                                    <el-button slot="trigger" type="primary">选择文件</el-button>
+                                    <el-button style="margin-left: 10px;" @click="submitScoreUpload">上传</el-button>
+                                </el-upload>
+                            </div>
+                            <div class="import-item">
+                                <span>导入数据库课程和知识点:</span>
+                                <el-upload
+                                    class="upload-demo"
+                                    action="/ums/api/import/database-course"
+                                    :on-success="handleDatabaseCourseImportSuccess"
+                                    :on-error="handleImportError"
+                                    :auto-upload="false"
+                                    ref="databaseCourseUpload">
+                                    <el-button slot="trigger" type="primary">选择文件</el-button>
+                                    <el-button style="margin-left: 10px;" @click="submitDatabaseCourseUpload">上传</el-button>
+                                </el-upload>
+                            </div>
+                        </div>
+                        <div class="export-section">
+                            <h3>数据导出</h3>
+                            <div class="export-item">
+                                <el-button type="primary" @click="exportTeachingPlans">导出教学计划</el-button>
+                            </div>
+                            <div class="export-item">
+                                <el-button type="primary" @click="exportCourseCatalog">导出课程目录</el-button>
+                            </div>
+                            <div class="export-item">
+                                <el-button type="primary" @click="exportScoreStatistics">导出成绩统计</el-button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 用户管理模块 -->
+                <div v-show="activeModule === 'user-management'" class="module">
+                    <h2>用户管理</h2>
+                    <div class="filter-section">
+                        <el-input v-model="userFilters.username" placeholder="用户名" style="width: 200px; margin-right: 10px;"></el-input>
+                        <el-select v-model="userFilters.role" placeholder="角色" style="width: 120px; margin-right: 10px;">
+                            <el-option label="所有角色" value=""></el-option>
+                            <el-option label="系统管理员" value="systemAdmin"></el-option>
+                            <el-option label="专业主任" value="majorDirector"></el-option>
+                            <el-option label="教师" value="teacher"></el-option>
+                        </el-select>
+                        <el-button type="primary" @click="queryUsers">查询</el-button>
+                        <el-button type="success" @click="showAddUserDialog">添加用户</el-button>
+                    </div>
+                    
+                    <el-table :data="users" stripe style="margin-top: 20px;">
+                        <el-table-column prop="userId" label="用户ID" width="80"></el-table-column>
+                        <el-table-column prop="username" label="用户名" min-width="120"></el-table-column>
+                        <el-table-column prop="name" label="姓名" min-width="100"></el-table-column>
+                        <el-table-column prop="email" label="邮箱" min-width="150"></el-table-column>
+                        <el-table-column prop="phone" label="电话" min-width="120"></el-table-column>
+                        <el-table-column prop="role" label="角色" width="120">
+                            <template slot-scope="scope">
+                                <span v-if="scope.row.role === 'systemAdmin'">系统管理员</span>
+                                <span v-else-if="scope.row.role === 'majorDirector'">专业主任</span>
+                                <span v-else-if="scope.row.role === 'teacher'">教师</span>
+                                <span v-else>{{ scope.row.role }}</span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="status" label="状态" width="100"></el-table-column>
+                        <el-table-column prop="createTime" label="创建时间" width="180"></el-table-column>
+                        <el-table-column label="操作" width="180" fixed="right">
+                            <template slot-scope="scope">
+                                <el-button type="primary" size="mini" @click="showEditUserDialog(scope.row)">编辑</el-button>
+                                <el-button type="danger" size="mini" @click="deleteUser(scope.row.userId)">删除</el-button>
+                                <el-button type="warning" size="mini" @click="resetPassword(scope.row.userId)" v-if="scope.row.role !== 'systemAdmin'">重置密码</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+                
+                <!-- 添加用户对话框 -->
+                <el-dialog title="添加用户" :visible.sync="addUserDialogVisible" width="500px">
+                    <el-form :model="userForm" :rules="userRules" ref="userForm">
+                        <el-form-item label="用户名" prop="username">
+                            <el-input v-model="userForm.username" placeholder="请输入用户名"></el-input>
+                        </el-form-item>
+                        <el-form-item label="密码" prop="password">
+                            <el-input type="password" v-model="userForm.password" placeholder="请输入密码"></el-input>
+                        </el-form-item>
+                        <el-form-item label="姓名" prop="name">
+                            <el-input v-model="userForm.name" placeholder="请输入姓名"></el-input>
+                        </el-form-item>
+                        <el-form-item label="邮箱" prop="email">
+                            <el-input v-model="userForm.email" placeholder="请输入邮箱"></el-input>
+                        </el-form-item>
+                        <el-form-item label="电话" prop="phone">
+                            <el-input v-model="userForm.phone" placeholder="请输入电话"></el-input>
+                        </el-form-item>
+                        <el-form-item label="角色" prop="role">
+                            <el-select v-model="userForm.role" placeholder="请选择角色">
+                                <el-option label="系统管理员" value="systemAdmin"></el-option>
+                                <el-option label="专业主任" value="majorDirector"></el-option>
+                                <el-option label="教师" value="teacher"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="状态" prop="status">
+                            <el-select v-model="userForm.status" placeholder="请选择状态">
+                                <el-option label="启用" value="enabled"></el-option>
+                                <el-option label="禁用" value="disabled"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="addUserDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveUser">确定</el-button>
+                    </span>
+                </el-dialog>
+                
+                <!-- 编辑用户对话框 -->
+                <el-dialog title="编辑用户" :visible.sync="editUserDialogVisible" width="500px">
+                    <el-form :model="userForm" :rules="userRules" ref="userForm">
+                        <el-form-item label="用户名" prop="username">
+                            <el-input v-model="userForm.username" placeholder="请输入用户名" disabled></el-input>
+                        </el-form-item>
+                        <el-form-item label="姓名" prop="name">
+                            <el-input v-model="userForm.name" placeholder="请输入姓名"></el-input>
+                        </el-form-item>
+                        <el-form-item label="邮箱" prop="email">
+                            <el-input v-model="userForm.email" placeholder="请输入邮箱"></el-input>
+                        </el-form-item>
+                        <el-form-item label="电话" prop="phone">
+                            <el-input v-model="userForm.phone" placeholder="请输入电话"></el-input>
+                        </el-form-item>
+                        <el-form-item label="角色" prop="role">
+                            <el-select v-model="userForm.role" placeholder="请选择角色">
+                                <el-option label="系统管理员" value="systemAdmin"></el-option>
+                                <el-option label="专业主任" value="majorDirector"></el-option>
+                                <el-option label="教师" value="teacher"></el-option>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="状态" prop="status">
+                            <el-select v-model="userForm.status" placeholder="请选择状态">
+                                <el-option label="启用" value="enabled"></el-option>
+                                <el-option label="禁用" value="disabled"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <span slot="footer" class="dialog-footer">
+                        <el-button @click="editUserDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="updateUser">确定</el-button>
+                    </span>
+                </el-dialog>
+            </main>
+        </div>
+    </div>
+    
+    <!-- 引入Vue -->
+    <script src="https://unpkg.com/vue@2/dist/vue.js"></script>
+    <!-- 引入Element UI JS -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <!-- 引入ECharts JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <!-- 引入自定义JS -->
+    <script src="js/main.js"></script>
+</body>
+</html>
